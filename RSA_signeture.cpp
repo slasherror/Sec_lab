@@ -1,82 +1,128 @@
 #include <iostream>
-// #include <cmath> // For the pow function
-#include<bits/stdc++.h>
+#include <cmath>
+#include <set>
+#include <string>
+#include <cstdlib>
 using namespace std;
 
-
+// Function to calculate power modulo p (g^k % p)
 long long mod_exp(long long base, long long exp, long long mod) {
     long long result = 1;
-    base = base % mod;  // Ensure base is less than mod
+    base = base % mod;
     while (exp > 0) {
-        if (exp % 2 == 1) {
+        if (exp % 2 == 1)
             result = (result * base) % mod;
-        }
         base = (base * base) % mod;
         exp = exp / 2;
     }
     return result;
 }
 
-long long modInverse(long long e, long long phi) {
-    for (long long d = 2; d < phi; d++) {
-        if ((e * d) % phi == 1)
-            return d;
+
+long long find_generator(long long p) {
+    set<long long> num;
+    long long g;
+    long long check = 0;
+
+    for (long long j = 2; j < p; j++) {
+        num.clear();
+        long long siz = 0;
+        for (long long i = 1; i < p; i++) {
+            siz++;
+            long long x = mod_exp(j, i, p);
+            num.insert(x);
+            if (siz != num.size()) break;
+            if (siz == p - 1) {
+                g = j;
+                check = 1;
+                break;
+            }
+        }
+        if (check) break;
     }
-    return -1;
+    return check ? g : -1;
 }
 
-// Sign a message using private key (d, n)
-long long sign_message(long long message, long long d, long long n) {
-    return mod_exp(message, d, n);  // Signature = message^d mod n
-}
-
-// Verify a signature using public key (e, n)
-bool verify_signature(long long message, long long signature, long long e, long long n) {
-    long long calculated_message = mod_exp(signature, e, n);  // message = signature^e mod n
-    return calculated_message == message;
-}
-
-// 1 < e < Φ(n), and
-// gcd(e, Φ(n)) = 1
-long long public_key(long long phi) {
-    for (long long e = 2; e < phi; e++) {
-        if (__gcd(e, phi) == 1)
-            return e;
+// Modular inverse using Extended Euclidean Algorithm
+long long mod_inverse(long long a, long long m) {
+    long long m0 = m, t, q;
+    long long x0 = 0, x1 = 1;
+    if (m == 1) return 0;
+    while (a > 1) {
+        q = a / m;
+        t = m;
+        m = a % m; a = t;
+        t = x0;
+        x0 = x1 - q * x0;
+        x1 = t;
     }
-    return -1;
+    if (x1 < 0) x1 += m0;
+    return x1;
 }
 
+
+pair<long long, long long> elgamal_encrypt(long long m, long long p, long long g, long long y, long long k) {
+    long long c1 = mod_exp(g, k, p);
+    long long c2 = (m * mod_exp(y, k, p)) % p;
+    return make_pair(c1, c2);
+}
+
+long long elgamal_decrypt(long long c1, long long c2, long long p, long long x) {
+    long long s = mod_exp(c1, x, p);
+    long long s_inv = mod_exp(s, p - 2, p); // Fermat's inverse since p is prime
+    return (c2 * s_inv) % p;
+}
+
+
+pair<long long, long long> elgamal_sign(long long m, long long p, long long g, long long x, long long k) {
+    long long r = mod_exp(g, k, p);                 // r = g^k mod p
+    long long k_inv = mod_inverse(k, p - 1);        // inverse of k mod (p-1)
+    long long s = ((m - (x * r) % (p - 1) + (p - 1)) * k_inv) % (p - 1);
+    return make_pair(r, s);
+}
+
+
+bool elgamal_verify(long long r, long long s, long long m, long long p, long long g, long long y) {
+    long long v1 = mod_exp(g, m, p);
+    long long v2 = (mod_exp(y, r, p) * mod_exp(r, s, p)) % p;
+    return v1 == v2;
+}
 
 int main() {
-    // Key generation
-    long long p = 61;  // First prime number
-    long long q = 53;  // Second prime number
-    long long n = p * q;  // Public modulus
-    long long phi = (p - 1) * (q - 1);  // Euler's totient function
-    
-    // Generate public and private keys
-    long long e = public_key(phi);  // Public exponent
-    long long d = modInverse(e, phi);  // Private exponent
+    long long p = 17;  
+    long long g = find_generator(p);
 
-    cout << "Public key (e, n): (" << e << ", " << n << ")" << endl;
-    cout << "Private key (d, n): (" << d << ", " << n << ")" << endl;
+    if (g == -1) {
+        cout << "No primitive root found.\n";
+        return 0;
+    }
 
-    // Original message
-    long long message = 42;
-    cout << "\nOriginal Message: " << message << endl;
+    cout << "Primitive Root (Generator) g: " << g << endl;
 
-    // Sign the message
-    long long signature = sign_message(message, d, n);
-    cout << "Signature: " << signature << endl;
+    long long x = 15;  
+    long long y = mod_exp(g, x, p);  
 
-    // Verify the signature
-    bool is_valid = verify_signature(message, signature, e, n);
-    cout << "Signature verification: " << (is_valid ? "Valid" : "Invalid") << endl;
+    cout << "Public Key: (p = " << p << ", g = " << g << ", y = " << y << ")\n";
+    cout << "Private Key: " << x << endl;
 
-    // Try to verify with a tampered message
-    long long tampered_message = message + 1;
-    bool is_tampered_valid = verify_signature(tampered_message, signature, e, n);
-    cout << "\nVerification with tampered message: " << (is_tampered_valid ? "Valid" : "Invalid") << endl;
+    long long m = 9;  
+    long long k = 6; 
+
+    // Encryption
+    pair<long long, long long> ciphertext = elgamal_encrypt(m, p, g, y, k);
+    cout << "Ciphertext: (c1 = " << ciphertext.first << ", c2 = " << ciphertext.second << ")\n";
+
+    // Decryption
+    long long decrypted_message = elgamal_decrypt(ciphertext.first, ciphertext.second, p, x);
+    cout << "Decrypted Message: " << decrypted_message << endl;
+
+    // Digital Signature
+    pair<long long, long long> signature = elgamal_sign(m, p, g, x, k);
+    cout << "Digital Signature: (r = " << signature.first << ", s = " << signature.second << ")\n";
+
+    // Verification
+    bool is_valid = elgamal_verify(signature.first, signature.second, m, p, g, y);
+    cout << "Signature is " << (is_valid ? "Valid" : "Invalid") << endl;
 
     return 0;
 }
